@@ -1,0 +1,17 @@
+*.env
+
+# Ignore all __pycache__ directories
+**/__pycache__/
+
+# Ignore the media folder in the backend directory
+/media/
+
+/celery.log
+/celerybeat-schedule.dat
+/celerybeat-schedule
+/celerybeat-schedule.bak
+/celerybeat-schedule.dir
+/celerybeat.pid
+
+__pycache__/
+*.pyc
