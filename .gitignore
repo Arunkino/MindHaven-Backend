@@ -4,14 +4,14 @@
 **/__pycache__/
 
 # Ignore the media folder in the backend directory
-/media/
+/mindhaven/media/
 
-/celery.log
-/celerybeat-schedule.dat
-/celerybeat-schedule
-/celerybeat-schedule.bak
-/celerybeat-schedule.dir
-/celerybeat.pid
+/mindhaven/celery.log
+/mindhaven/celerybeat-schedule.dat
+/mindhaven/celerybeat-schedule
+/mindhaven/celerybeat-schedule.bak
+/mindhaven/celerybeat-schedule.dir
+/mindhaven/celerybeat.pid
 
 __pycache__/
 *.pyc
