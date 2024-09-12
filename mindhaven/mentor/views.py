@@ -114,6 +114,7 @@ def get_agora_token(request, appointment_id):
     try:
         appointment = Appointment.objects.get(video_call_id=appointment_id)
         if request.user != appointment.user and request.user != appointment.mentor.user:
+            logger.info(f"User {request.user.id} is not authorized to join call {appointment_id}")
             return Response({'error': 'You are not authorized to join this call'}, status=403)
         
         # Generate a fresh token for each request

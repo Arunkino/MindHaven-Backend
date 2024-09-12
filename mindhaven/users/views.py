@@ -132,7 +132,7 @@ class LoginView(TokenObtainPairView):
                 'user': user_data
             }, status=status.HTTP_200_OK)
         
-        return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Invalid email or password. Please try again.'}, status=status.HTTP_401_UNAUTHORIZED)
     
 
     

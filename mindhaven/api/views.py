@@ -100,6 +100,13 @@ class MentorAvailabilityViewSet(viewsets.ModelViewSet):
         else:
             return MentorAvailability.objects.none()
 
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'mentor_profile'):
+            return MentorAvailability.objects.filter(mentor=user.mentor_profile)
+        else:
+            return MentorAvailability.objects.none()
+
     def perform_create(self, serializer):
         if hasattr(self.request.user, 'mentor_profile'):
             is_recurring = self.request.data.get('is_recurring', False)
@@ -107,68 +114,62 @@ class MentorAvailabilityViewSet(viewsets.ModelViewSet):
             if 'current_date' in self.request.data:
                 current_date = parse(self.request.data['current_date'])
             
-            # Check for existing availability
-            existing_availability = MentorAvailability.objects.filter(
-                mentor=self.request.user.mentor_profile,
-                day_of_week=self.request.data['day_of_week'],
-                start_time=self.request.data['start_time'],
-                end_time=self.request.data['end_time']
-            ).first()
+            logger.debug(f"Creating availability for date: {current_date}, is_recurring: {is_recurring}")
 
-            if existing_availability:
-                # Update existing availability if it exists
-                existing_availability.is_recurring = is_recurring
-                existing_availability.save()
-                availability = existing_availability
-            else:
-                # Create new availability if it doesn't exist
-                availability = serializer.save(mentor=self.request.user.mentor_profile)
-
+            # Convert day_of_week from frontend (Sun = 0) to backend (Mon = 0)
+            day_of_week = (int(self.request.data['day_of_week']) - 1) % 7
+            availability = serializer.save(mentor=self.request.user.mentor_profile, day_of_week=day_of_week)
             self.generate_availability_slots(availability, is_recurring, current_date)
         else:
+            logger.warning("Non-mentor user attempted to create availability")
             raise PermissionDenied("Only mentors can create availabilities.")
 
     def generate_availability_slots(self, availability, is_recurring, current_date):
+        logger.debug(f"Generating slots for availability: {availability}, is_recurring: {is_recurring}, current_date: {current_date}")
+
+        current_date = timezone.localtime(current_date)
         start_date = current_date.date()
         end_date = start_date + timedelta(weeks=4 if is_recurring else 1)
-        current_date = start_date
 
-        while current_date <= end_date:
-            if current_date.weekday() == availability.day_of_week:
-                slot_start = timezone.make_aware(datetime.combine(current_date, availability.start_time))
-                slot_end = timezone.make_aware(datetime.combine(current_date, availability.end_time))
+        availability_day = availability.day_of_week
+        slot_date = start_date
 
-                # Handle same-day creation
+        while slot_date <= end_date:
+            if slot_date.weekday() == availability_day:
+                slot_start = timezone.make_aware(datetime.combine(slot_date, availability.start_time))
+                slot_end = timezone.make_aware(datetime.combine(slot_date, availability.end_time))
+
+                logger.debug(f"Processing date: {slot_date}, start: {slot_start}, end: {slot_end}")
+
                 now = timezone.now()
-                if slot_start < now:
-                    if current_date == start_date:
-                        slot_start = now.replace(minute=(now.minute // 30) * 30, second=0, microsecond=0) + timedelta(minutes=30)
-                    else:
-                        current_date += timedelta(days=1)
-                        continue
+                if slot_start > now:
+                    while slot_start < slot_end:
+                        next_slot = slot_start + timedelta(minutes=30)
 
-                while slot_start < slot_end:
-                    next_slot = slot_start + timedelta(minutes=30)
-                    
-                    # Check for existing slots
-                    existing_slot = AvailabilitySlot.objects.filter(
-                        mentor_availability__mentor=availability.mentor,
-                        date=current_date,
-                        start_time__lt=next_slot.time(),
-                        end_time__gt=slot_start.time()
-                    ).first()
-
-                    if not existing_slot:
-                        AvailabilitySlot.objects.create(
+                        existing_slot = AvailabilitySlot.objects.filter(
                             mentor_availability=availability,
-                            date=current_date,
+                            date=slot_date,
                             start_time=slot_start.time(),
-                            end_time=next_slot.time(),
-                            status='available'
-                        )
-                    slot_start = next_slot
+                            end_time=next_slot.time()
+                        ).first()
 
-            current_date += timedelta(days=1)
+                        if not existing_slot:
+                            AvailabilitySlot.objects.create(
+                                mentor_availability=availability,
+                                date=slot_date,
+                                start_time=slot_start.time(),
+                                end_time=next_slot.time(),
+                                status='available'
+                            )
+                            logger.debug(f"Created slot: date={slot_date}, start={slot_start.time()}, end={next_slot.time()}")
+
+                        slot_start = next_slot
+
+            slot_date += timedelta(days=1)
+
+        logger.debug("Finished generating availability slots")
+
+
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
